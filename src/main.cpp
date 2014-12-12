@@ -3,6 +3,7 @@
 #include "circuits/circuit.h"
 #include "circuits/element.h"
 #include "matrix/matrix.h"
+#include "matrix/newtonraphson.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -10,6 +11,8 @@
 #include <string>
 #include <vector>
 #include <cstdlib>
+#include <math.h>
+
 
 using namespace std;
 
@@ -20,15 +23,25 @@ int main(int argc, char **argv){
 
     int rc=0;
     ifstream netlistFile;
-    double Yn[MAX_NODES+1][MAX_NODES+2];
-    Circuit circuit;
+
+    // Reads netlist file
+    string netlistFileName;
+    rc = openNetlistFile(argc, argv, netlistFileName, netlistFile);
+    if (rc == EXIT_FAILURE)
+        exitPolitely(EXIT_FAILURE);
+    // Prepares solutions file
+    string outputFileName;
+    outputFileName = netlistFileName.substr(0, netlistFileName.find(".")).append("_mnapoly.tab");
+    ofstream solutionsFile(outputFileName.c_str(), ofstream::out);
 
 
-    readNetlistFile(argc, argv, netlistFile);
-
+    // Parses netlist file (constructs Circuit)
     cout << "Reading netlist:" << endl;
-    circuit = Circuit(netlistFile);
+    Circuit circuit(netlistFile);
+    netlistFile.close();
 
+    // Write solutions file header
+    circuit.writeSolutionsHeader(solutionsFile);
 
     #ifdef DEBUG
     cout << "Internal variables:" << endl;
@@ -39,27 +52,33 @@ int main(int argc, char **argv){
     #endif
 
 
-    // Operations on the modified matrix...
-    init(circuit.getNumVariables(), Yn);
-    circuit.applyStamps(Yn);
-    rc = solve(circuit.getNumVariables(), Yn);
-    if (rc) // if not return code 0 (success)
-        exitPolitely(EXIT_FAILURE);
+    // Bias Analysis
+    double t=0;
+    double solution[MAX_NODES+1];
+    copySolution(circuit.getNumVariables(), ZERO_SOLUTION, solution);
+    runNewtonRaphson(circuit, solution, t);
+    circuit.appendSolutionToFile(solutionsFile, solution);
 
+    // Transient Analysis
+    double internalStep = circuit.getInternalStep();
+    int numInternalSteps = circuit.getNumInternalSteps();
+    double finalTime = circuit.getFinalTime();
+    double lastSolution[MAX_NODES+1];
+    int numIterations = 0;
+    do {
+        numIterations++;
+        t = t + internalStep;
+        copySolution(circuit.getNumVariables(),
+                     solution,
+                     lastSolution);
+        runNewtonRaphson(circuit, solution, t, lastSolution);
+        if (!(numIterations % numInternalSteps))
+            circuit.appendSolutionToFile(solutionsFile, solution, t);
+    } while (t<finalTime);
 
-    #ifdef DEBUG
-    cout << "Final system:" << endl;
-    print(circuit.getNumVariables(), Yn);
-
-    cout << "Solution:" << endl;
-    circuit.printSolution(Yn);
-    #endif
-
-
-    /* Save solution to File */
-    string OutputFile;
-    OutputFile = "output.tab";
-    circuit.WriteSolutionToFile(OutputFile, Yn);
+    //Closing The File
+    cout << endl << "Created: " << outputFileName << endl;
+    solutionsFile.close();
 
 
     exitPolitely(EXIT_SUCCESS);

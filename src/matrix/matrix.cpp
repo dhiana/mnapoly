@@ -51,7 +51,7 @@ int solve( int nv, double Yn[MAX_NODES+1][MAX_NODES+2] ){
                 Yn[a][l] = p;
             }
         }
-        if( fabs( t ) < TOLG ){
+        if( fabs( t ) == 0 ){
             printf("Sistema singular\n");
             return 1;
         }
@@ -65,4 +65,22 @@ int solve( int nv, double Yn[MAX_NODES+1][MAX_NODES+2] ){
         }
     }
     return 0;
+}
+
+
+void getSolution(int numVariables,
+                 double Yn[MAX_NODES+1][MAX_NODES+2],
+                 double solution[MAX_NODES+1]){
+    solution[0] = 0; // gnd
+    for (int i=1; i<=numVariables; i++) {
+        solution[i] = Yn[i][numVariables+1];
+    }
+}
+
+void copySolution(int numVariables,
+                  double originalSolution[MAX_NODES+1],
+                  double targetSolution[MAX_NODES+1]){
+    for (int i=0; i<=numVariables; i++) {
+        targetSolution[i] = originalSolution[i];
+    }
 }
